@@ -1,0 +1,697 @@
+
+
+<!DOCTYPE html>
+<html lang="zh-CN" data-default-color-scheme=light>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/avatar_min.jpg">
+  <link rel="icon" href="/img/avatar_min.jpg">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Wei Han">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="从Java、C&#x2F;C++和汇编的层面深入分析CAS，并在C&#x2F;C++层面动手实现自己的原子操作，最后使用Python制作了个动画展示了CAS的执行过程">
+<meta property="og:type" content="article">
+<meta property="og:title" content="深入理解 CAS">
+<meta property="og:url" content="https://hwxll.github.io/2022/08/19/cas/index.html">
+<meta property="og:site_name" content="hwxll">
+<meta property="og:description" content="从Java、C&#x2F;C++和汇编的层面深入分析CAS，并在C&#x2F;C++层面动手实现自己的原子操作，最后使用Python制作了个动画展示了CAS的执行过程">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://hwxll.github.io/2022/08/19/cas/layout.png">
+<meta property="article:published_time" content="2022-08-18T19:25:10.000Z">
+<meta property="article:modified_time" content="2025-02-06T14:17:15.035Z">
+<meta property="article:author" content="Wei Han">
+<meta property="article:tag" content="Java">
+<meta property="article:tag" content="C&#x2F;C++">
+<meta property="article:tag" content="Assembly">
+<meta property="article:tag" content="Python">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://hwxll.github.io/2022/08/19/cas/layout.png">
+  
+  
+  
+  <title>深入理解 CAS - hwxll</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+  
+<link rel="stylesheet" href="/css/maccodestyle.css">
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"hwxll.github.io","root":"/","version":"1.9.8","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":"WkEpOddRoE98lpeFFEOWlpYI-gzGzoHsz","app_key":"FhPiPljiRcKMz6LWrUp6PmP9","server_url":null,"path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 70vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>hwxll</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>首页</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>归档</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>分类</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>标签</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>关于</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="深入理解 CAS"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+  </div>
+
+  <div class="mt-1">
+    
+
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">深入理解 CAS</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="1-Java层面探究"><a href="#1-Java层面探究" class="headerlink" title="1 Java层面探究"></a><span class="label label-primary">1 Java层面探究</span></h2><p>Java中的原子类<code>Atomic</code>底层的实现原理是CAS，本文就让我们一起来深入探究CAS。<br>下面是<code>AtomicInteger</code>的测试代码 ，执行完毕后会发现原子类实例<code>ai</code>最终是精确的10000，而普通变量<code>bi</code>的值是一个小于10000的不固定的值。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br></pre></td><td class="code"><pre><code class="hljs java"><span class="hljs-keyword">package</span> com.hw.review2022.concurrent;<br> <br><span class="hljs-keyword">import</span> org.junit.Test;<br> <br><span class="hljs-keyword">import</span> java.util.concurrent.Executors;<br><span class="hljs-keyword">import</span> java.util.concurrent.ThreadPoolExecutor;<br><span class="hljs-keyword">import</span> java.util.concurrent.TimeUnit;<br><span class="hljs-keyword">import</span> java.util.concurrent.atomic.AtomicInteger;<br> <br><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">TestCAS</span> &#123;<br>    <span class="hljs-comment">/**</span><br><span class="hljs-comment">     * 被多个线程访问的变量</span><br><span class="hljs-comment">     */</span><br>    <span class="hljs-keyword">static</span> <span class="hljs-type">AtomicInteger</span> <span class="hljs-variable">ai</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicInteger</span>(<span class="hljs-number">0</span>);<br>    <span class="hljs-keyword">static</span> <span class="hljs-type">int</span> <span class="hljs-variable">bi</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;<br> <br>    <span class="hljs-comment">/**</span><br><span class="hljs-comment">     * 对ai和bi执行1000次自增</span><br><span class="hljs-comment">     */</span><br>    <span class="hljs-keyword">class</span> <span class="hljs-title class_">Task</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Runnable</span> &#123;<br>        <span class="hljs-comment">//任务id</span><br>        <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> id;<br> <br>        <span class="hljs-keyword">public</span> <span class="hljs-title function_">Task</span><span class="hljs-params">(<span class="hljs-type">int</span> i)</span> &#123;<br>            <span class="hljs-built_in">this</span>.id = i;<br>        &#125;<br> <br>        <span class="hljs-meta">@Override</span><br>        <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">run</span><span class="hljs-params">()</span> &#123;<br>           <span class="hljs-keyword">for</span>(<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">1000</span>; i++) &#123;<br>               <span class="hljs-keyword">try</span>&#123;<br>                   <span class="hljs-keyword">if</span>(i % <span class="hljs-number">100</span> == <span class="hljs-number">0</span>) &#123;<br>                       System.out.println(<span class="hljs-string">&quot;Thread name : &quot;</span> + Thread.currentThread().getName() + <span class="hljs-string">&quot;, Task id : &quot;</span> + id + <span class="hljs-string">&quot;, loop : &quot;</span> + i);<br>                   &#125;<br>                   Thread.sleep(<span class="hljs-number">2</span>);<br>                   ai.addAndGet(<span class="hljs-number">1</span>);<br>                   bi++;<br>               &#125; <span class="hljs-keyword">catch</span> (InterruptedException e) &#123;<br>                   e.printStackTrace();<br>               &#125;<br>           &#125;<br>        &#125;<br>    &#125;<br> <br>    <span class="hljs-meta">@Test</span><br>    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">test</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception &#123;<br>        <span class="hljs-comment">/**</span><br><span class="hljs-comment">         * 创建含有3个线程的线程池</span><br><span class="hljs-comment">         */</span><br>        <span class="hljs-type">ThreadPoolExecutor</span> <span class="hljs-variable">executor</span> <span class="hljs-operator">=</span> (ThreadPoolExecutor) Executors.newFixedThreadPool(<span class="hljs-number">3</span>);<br>        <span class="hljs-comment">/**</span><br><span class="hljs-comment">         * 在线程池中执行10个任务</span><br><span class="hljs-comment">         */</span><br>        <span class="hljs-keyword">for</span>(<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">10</span>; i++) &#123;<br>            executor.execute(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Task</span>(i));<br>        &#125;<br> <br>        <span class="hljs-comment">/**</span><br><span class="hljs-comment">         * 等待线程池中的任务执行完毕后才去打印ai和bi的值</span><br><span class="hljs-comment">         */</span><br>        executor.shutdown();<br>        executor.awaitTermination(<span class="hljs-number">60</span>, TimeUnit.SECONDS);<br>        System.out.println(<span class="hljs-string">&quot;ai is right : &quot;</span> + ai);<br>        System.out.println(<span class="hljs-string">&quot;bi is wrong : &quot;</span> + bi);<br>    &#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>上述代码的核心是 <code>AtomicInteger.addAndGet</code>方法</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs java"><span class="hljs-keyword">private</span> <span class="hljs-keyword">volatile</span> <span class="hljs-type">int</span> value;<br><span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">long</span> valueOffset;<br>    <br><span class="hljs-comment">/**</span><br><span class="hljs-comment"> * Atomically adds the given value to the current value.</span><br><span class="hljs-comment"> *</span><br><span class="hljs-comment"> * <span class="hljs-doctag">@param</span> delta the value to add</span><br><span class="hljs-comment"> * <span class="hljs-doctag">@return</span> the updated value</span><br><span class="hljs-comment"> */</span><br><span class="hljs-keyword">public</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-title function_">addAndGet</span><span class="hljs-params">(<span class="hljs-type">int</span> delta)</span> &#123;<br>    <span class="hljs-keyword">return</span> unsafe.getAndAddInt(<span class="hljs-built_in">this</span>, valueOffset, delta) + delta;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>首先我们看一下<code>AtomicInteger</code>类实例对象的内存布局</p>
+<img src="/2022/08/19/cas/layout.png" srcset="/img/loading.gif" lazyload class="">
+
+<p><code>this</code>指向了对象的起始地址，通过<code>this + valueOffset(=12)</code>我们就可以获得<code>value</code>字段的内存地址（即C&#x2F;C++中的指向<code>value</code>的指针），进而读写该<code>value</code>值。</p>
+<p>然后我们接着看<code>Unsafe.getAndAddInt</code>方法</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs java"><span class="hljs-comment">//                             原子实例ai  valueOffset  delta(增量)</span><br><span class="hljs-keyword">public</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-title function_">getAndAddInt</span><span class="hljs-params">(Object var1, <span class="hljs-type">long</span> var2, <span class="hljs-type">int</span> var4)</span> &#123;<br>    <span class="hljs-type">int</span> var5;<br>    <span class="hljs-keyword">do</span> &#123;<br>        var5 = <span class="hljs-built_in">this</span>.getIntVolatile(var1, var2); <span class="hljs-comment">// var5: oldValue</span><br>    &#125; <span class="hljs-keyword">while</span>(!<span class="hljs-built_in">this</span>.compareAndSwapInt(var1, var2, var5, var5 + var4)); <span class="hljs-comment">// var5 + var4: updateValue</span><br> <br>    <span class="hljs-keyword">return</span> var5;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p><code>var5</code>这个变量是通过<code>ai</code>的起始地址 + <code>valueOffset</code>偏移值获取到<code>value</code>的内存地址，进而获取到的<code>value</code>的值，我们把这个值称为<span class="label label-primary">oldValue</span></p>
+<p><code>var5+var4</code>就是我们期望更新的值，我们把它叫做<span class="label label-info">updateValue</span></p>
+<p>接下来发现<code>Unsafe.compareAndSwapInt</code>是一个 native 方法(就是在Java虚拟机中用 C&#x2F;C++ 实现的方法)</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">final</span> <span class="hljs-keyword">native</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">compareAndSwapInt</span><span class="hljs-params">(Object var1, <span class="hljs-type">long</span> var2, <span class="hljs-type">int</span> var4, <span class="hljs-type">int</span> var5)</span>;<br></code></pre></td></tr></table></figure>
+
+<h2 id="2-C-C-层面探究"><a href="#2-C-C-层面探究" class="headerlink" title="2 C&#x2F;C++层面探究"></a><span class="label label-success">2 C&#x2F;C++层面探究</span></h2><p>现在Java语言层面我们已经分析完了，完全看不到CAS具体是怎么实现的，接下来我们继续去探究JDK源码<sup id="fnref:1" class="footnote-ref"><a href="#fn:1" rel="footnote"><span class="hint--top hint--rounded" aria-label="[Github OpenJDK8源码](https://github.com/AdoptOpenJDK/openjdk-jdk8u)">[1]</span></a></sup></p>
+<p><code>Unsafe.compareAndSwapInt</code>的源码所在目录为<code>hotspot/src/share/vm/prims/unsafe.cpp</code></p>
+<p>这个方法的前两个参数不用去了解（JNI是Java调用C的方式），后四个参数和<code>Unsafe.compareAndSwapInt</code>方法的一一对应。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs c++"><span class="hljs-built_in">UNSAFE_ENTRY</span>(jboolean, <span class="hljs-built_in">Unsafe_CompareAndSwapInt</span>(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, jint e, jint x))<br>  <span class="hljs-built_in">UnsafeWrapper</span>(<span class="hljs-string">&quot;Unsafe_CompareAndSwapInt&quot;</span>);<br>  oop p = JNIHandles::<span class="hljs-built_in">resolve</span>(obj);<br>  jint* addr = (jint *) <span class="hljs-built_in">index_oop_from_field_offset_long</span>(p, offset);<br>  <span class="hljs-comment">/**</span><br><span class="hljs-comment">   * x代表了期望更新的值updateValue</span><br><span class="hljs-comment">   * addr代表了value这个字段的内存地址</span><br><span class="hljs-comment">   * e代表了oldValue</span><br><span class="hljs-comment">   */</span><br>  <span class="hljs-keyword">return</span> (jint)(Atomic::<span class="hljs-built_in">cmpxchg</span>(x, addr, e)) == e;<br>UNSAFE_END<br></code></pre></td></tr></table></figure>
+
+<p>继续往下分析来到了最核心的部分</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-keyword">inline</span> jint     <span class="hljs-title function_">Atomic::cmpxchg</span>    <span class="hljs-params">(jint     exchange_value, <span class="hljs-keyword">volatile</span> jint*     dest, jint     compare_value)</span> &#123;<br>  <span class="hljs-type">int</span> mp = os::is_MP(); <span class="hljs-comment">// MP means multiprocessor，多处理器系统需要给cmpxchg指令加上lock前缀</span><br>  __asm__ <span class="hljs-title function_">volatile</span> <span class="hljs-params">(LOCK_IF_MP(%<span class="hljs-number">4</span>) <span class="hljs-string">&quot;cmpxchgl %1,(%3)&quot;</span></span><br><span class="hljs-params">                    : <span class="hljs-string">&quot;=a&quot;</span> (exchange_value)</span><br><span class="hljs-params">                    : <span class="hljs-string">&quot;r&quot;</span> (exchange_value), <span class="hljs-string">&quot;a&quot;</span> (compare_value), <span class="hljs-string">&quot;r&quot;</span> (dest), <span class="hljs-string">&quot;r&quot;</span> (mp)</span><br><span class="hljs-params">                    : <span class="hljs-string">&quot;cc&quot;</span>, <span class="hljs-string">&quot;memory&quot;</span>)</span>;<br>  <span class="hljs-keyword">return</span> exchange_value;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p><code>cmpxchgl</code>是一个汇编指令（最后一个字符<code>l</code>代表了<code>cmpxchg</code>指令的参数类型为<code>jint</code>，对于<code>jlong</code>类型最后一个字符是<code>q</code>，不同操作系统可能会不同），所以我们需要去理解<code>cmpxchg</code>这条汇编指令。</p>
+<h2 id="3-汇编层面探究"><a href="#3-汇编层面探究" class="headerlink" title="3 汇编层面探究"></a><span class="label label-danger">3 汇编层面探究</span></h2><p>下面给出我在C中实现的CAS来帮助大家理解CAS和<code>cmpxchg</code>指令。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&lt;unistd.h&gt;</span></span><br><span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&quot;stdio.h&quot;</span></span><br><span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&quot;pthread.h&quot;</span></span><br> <br><span class="hljs-type">int</span> <span class="hljs-title function_">cmp</span><span class="hljs-params">(<span class="hljs-type">int</span> oldValue, <span class="hljs-type">int</span>* addr, <span class="hljs-type">int</span> updateValue)</span>;<br><span class="hljs-type">void</span> <span class="hljs-title function_">atomic_add</span><span class="hljs-params">(<span class="hljs-type">int</span>* addr, <span class="hljs-type">int</span> delta)</span>;<br><span class="hljs-type">void</span> <span class="hljs-title function_">task</span><span class="hljs-params">()</span>;<br><span class="hljs-type">void</span> <span class="hljs-title function_">atomic_task</span><span class="hljs-params">()</span>;<br> <br><span class="hljs-comment">/**</span><br><span class="hljs-comment"> * 被多个线程访问的共享变量</span><br><span class="hljs-comment"> */</span><br><span class="hljs-type">int</span> <span class="hljs-type">atomic_count</span> = <span class="hljs-number">0</span>, count = <span class="hljs-number">0</span>;<br> <br> <br><span class="hljs-comment">/**</span><br><span class="hljs-comment"> * 测试代码</span><br><span class="hljs-comment"> */</span><br><span class="hljs-type">int</span> <span class="hljs-title function_">main</span><span class="hljs-params">()</span> &#123;<br>    <span class="hljs-type">pthread_t</span> tid, tid2, tid3, tid4, tid5, tid6;<br>    <span class="hljs-comment">/**</span><br><span class="hljs-comment">     * 创建了6个子线程，tid为子线程id，task和atomic_task是子线程的任务函数</span><br><span class="hljs-comment">     */</span><br>    pthread_create(&amp;tid, <span class="hljs-literal">NULL</span>, (<span class="hljs-type">void</span> *) task, <span class="hljs-literal">NULL</span>);<br>    pthread_create(&amp;tid2, <span class="hljs-literal">NULL</span>, (<span class="hljs-type">void</span> *) task, <span class="hljs-literal">NULL</span>);<br>    pthread_create(&amp;tid3, <span class="hljs-literal">NULL</span>, (<span class="hljs-type">void</span> *) task, <span class="hljs-literal">NULL</span>);<br>    pthread_create(&amp;tid4, <span class="hljs-literal">NULL</span>, (<span class="hljs-type">void</span> *) <span class="hljs-type">atomic_task</span>, <span class="hljs-literal">NULL</span>);<br>    pthread_create(&amp;tid5, <span class="hljs-literal">NULL</span>, (<span class="hljs-type">void</span> *) <span class="hljs-type">atomic_task</span>, <span class="hljs-literal">NULL</span>);<br>    pthread_create(&amp;tid6, <span class="hljs-literal">NULL</span>, (<span class="hljs-type">void</span> *) <span class="hljs-type">atomic_task</span>, <span class="hljs-literal">NULL</span>);<br> <br>    <span class="hljs-comment">/**</span><br><span class="hljs-comment">     * 主线程等待6个子线程执行完才会往下执行printf</span><br><span class="hljs-comment">     */</span><br>    pthread_join(tid, <span class="hljs-literal">NULL</span>);<br>    pthread_join(tid2, <span class="hljs-literal">NULL</span>);<br>    pthread_join(tid3, <span class="hljs-literal">NULL</span>);<br>    pthread_join(tid4, <span class="hljs-literal">NULL</span>);<br>    pthread_join(tid5, <span class="hljs-literal">NULL</span>);<br>    pthread_join(tid6, <span class="hljs-literal">NULL</span>);<br> <br>    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;count is %d\n&quot;</span>, count); <span class="hljs-comment">//预期最后的结果小于900000</span><br>    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;atomic_count is %d\n&quot;</span>, <span class="hljs-type">atomic_count</span>); <span class="hljs-comment">//预期最后的结果精确等于900000</span><br>    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br>&#125;<br>   <br><span class="hljs-comment">/**</span><br><span class="hljs-comment"> *</span><br><span class="hljs-comment"> * @param oldValue 最开始获取到的value值</span><br><span class="hljs-comment"> * @param addr 多线程访问的变量的地址</span><br><span class="hljs-comment"> * @param updateValue 期望更新的新值</span><br><span class="hljs-comment"> * @return</span><br><span class="hljs-comment"> */</span><br><span class="hljs-type">int</span> <span class="hljs-title function_">cmp</span><span class="hljs-params">(<span class="hljs-type">int</span> oldValue, <span class="hljs-type">int</span>* addr, <span class="hljs-type">int</span> updateValue)</span> &#123;<br>    <span class="hljs-type">int</span> resValue;<br>    __asm__ __volatile__ (<span class="hljs-string">&quot;lock\n\t&quot;</span><br>                          <span class="hljs-string">&quot;cmpxchgl %2, (%3)&quot;</span><br>                          : <span class="hljs-string">&quot;=a&quot;</span>(resValue)<br>                          : <span class="hljs-string">&quot;a&quot;</span>(oldValue), <span class="hljs-string">&quot;r&quot;</span>(updateValue), <span class="hljs-string">&quot;r&quot;</span>(addr)<br>                          : <span class="hljs-string">&quot;cc&quot;</span>, <span class="hljs-string">&quot;memory&quot;</span>);<br>    <span class="hljs-keyword">return</span> resValue;<br>&#125;<br> <br><span class="hljs-comment">/**</span><br><span class="hljs-comment"> *</span><br><span class="hljs-comment"> * @param addr 多线程访问变量的地址</span><br><span class="hljs-comment"> * @param delta 这个变量想要增加的值</span><br><span class="hljs-comment"> * @return</span><br><span class="hljs-comment"> */</span><br><span class="hljs-type">void</span> <span class="hljs-title function_">atomic_add</span><span class="hljs-params">(<span class="hljs-type">int</span>* addr, <span class="hljs-type">int</span> delta)</span> &#123;<br>    <span class="hljs-type">int</span> oldValue;<br>    <span class="hljs-keyword">do</span> &#123;<br>        oldValue = *addr;<br>    &#125; <span class="hljs-keyword">while</span> ( cmp(oldValue, addr, oldValue + delta) != oldValue );<br>&#125;<br> <br><span class="hljs-type">void</span> <span class="hljs-title function_">atomic_task</span><span class="hljs-params">()</span> &#123;<br>    <span class="hljs-keyword">for</span>(<span class="hljs-type">int</span> i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">300000</span>; i++) &#123;<br>        <span class="hljs-type">atomic_add</span>(&amp;<span class="hljs-type">atomic_count</span>, <span class="hljs-number">1</span>);<br>        usleep(<span class="hljs-number">60</span>);<br>    &#125;<br>&#125;<br> <br><span class="hljs-type">void</span> <span class="hljs-title function_">task</span><span class="hljs-params">()</span> &#123;<br>    <span class="hljs-keyword">for</span>(<span class="hljs-type">int</span> i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">300000</span>; i++) &#123;<br>        count += <span class="hljs-number">1</span>;<br>        usleep(<span class="hljs-number">60</span>); <span class="hljs-comment">//0.06ms</span><br>    &#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>重点讲解一下<code>cmp</code>函数</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-type">int</span> <span class="hljs-title function_">cmp</span><span class="hljs-params">(<span class="hljs-type">int</span> oldValue, <span class="hljs-type">int</span>* addr, <span class="hljs-type">int</span> updateValue)</span> &#123;<br>    <span class="hljs-type">int</span> resValue;<br>    __asm__ __volatile__ (<span class="hljs-string">&quot;lock\n\t&quot;</span>   <span class="hljs-comment">//保证原子性</span><br>                          <span class="hljs-string">&quot;cmpxchgl %2, (%3)&quot;</span> <span class="hljs-comment">//核心指令</span><br>                          : <span class="hljs-string">&quot;=a&quot;</span>(resValue) <span class="hljs-comment">//输出列表</span><br>                          : <span class="hljs-string">&quot;a&quot;</span>(oldValue), <span class="hljs-string">&quot;r&quot;</span>(updateValue), <span class="hljs-string">&quot;r&quot;</span>(addr) <span class="hljs-comment">//输入列表</span><br>                          : <span class="hljs-string">&quot;cc&quot;</span>, <span class="hljs-string">&quot;memory&quot;</span>); <span class="hljs-comment">//表明这条内联汇编会更改内存值和flag寄存器</span><br>    <span class="hljs-keyword">return</span> resValue;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>其实也就是我自己实现的JDK中的<code>Atomic::cmpxchg</code>函数，只不过更容易看懂一些。</p>
+<p><span class="label label-primary">oldValue</span>就是我们先前获取到的<code>value</code>值，<code>addr</code>就是<code>value</code>字段的内存地址，在<code>cmpxchg</code>指令中会用到这个地址，<span class="label label-info">updateValue</span>就是我们期望更新的<code>value</code>值(<span class="label label-primary">oldValue</span>+增量<code>delta</code>)</p>
+<p>以下关于内联汇编的知识大家可以去参考GCC-Inline-Assembly-HOWTO<sup id="fnref:2" class="footnote-ref"><a href="#fn:2" rel="footnote"><span class="hint--top hint--rounded" aria-label="[GCC-Inline-Assembly-HOWTO](http://www.ibiblio.org/gferg/ldp/GCC-Inline-Assembly-HOWTO.html)">[2]</span></a></sup></p>
+<p>输入列表中：</p>
+<p><code>&quot;a&quot;(oldValue)</code>：a代表EAX寄存器，意思是将变量<span class="label label-primary">oldValue</span>的值输入到EAX寄存器</p>
+<p><code>&quot;r&quot;(updateValue) &quot;r&quot;(addr)</code>：意思是将变量<span class="label label-info">updateValue</span>和地址<code>addr</code>也放到寄存器中，r(register)代表一组寄存器，也就是从这一组寄存器中随便选一个存<span class="label label-info">updateValue</span>，随便选一个存<code>addr</code></p>
+<p>输出列表中：</p>
+<p><code>&quot;=a&quot;(resValue)</code>：表示内联汇编执行完后，将EAX寄存器的值存到<code>resValue</code>这个变量中。</p>
+<p>我们在输出列表和输入列表中声明了许多变量，这些变量从<code>%0</code>开始依次往下标号，所以<code>%0</code>表示<code>resValue</code>，<code>%1</code>代表了<span class="label label-primary">oldValue</span>，<code>%2</code>代表了<span class="label label-info">updateValue</span>，<code>%3</code>代表了<code>addr</code>。</p>
+<p>现在我们结合的<code>cmpxchg</code>指令的功能，来理解一下这段汇编到底在做什么。汇编语言有Intel和AT&amp;T两种语法，一般我们用的都是AT&amp;T这种，下面的讲解也是基于该语法的:</p>
+<p class="note note-info">cmpxchg 指令有两个操作数，同时还使用了EAX 寄存器。首先，它将第二个操作数和EAX寄存器相比较，如果相同则把第一个操作数赋值给第二个操作数，否则将第一个操作数赋值给EAX 寄存器</p>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs assembly">cmpxchgl %2, (%3) <br></code></pre></td></tr></table></figure>
+
+<p><code>%2</code>是第一个操作数，即<span class="label label-info">updateValue</span>，也就是无冲突的时候我们期望更新的值</p>
+<p><code>(%3)</code>是第二个操作数，即<code>(addr)</code>，<code>()</code>表示取值操作(相当于C语言中的<code>*</code>)，因为<code>addr</code>是<code>value</code>变量的地址，所以该操作数是在取此刻<code>value</code>的值<code>curValue</code></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-type">int</span> *a = <span class="hljs-number">5</span>; <span class="hljs-comment">//代表了a是一个指针，指向一个int变量，即a是该int变量的地址，*a表示取该int变量的值5</span><br></code></pre></td></tr></table></figure>
+
+<p>首先将<span class="label label-primary">oldValue</span>存储到EAX寄存器中，然后用第二个操作数<code>curValue</code>和<span class="label label-primary">oldValue</span>行比较，如果相等，则说明从得到<span class="label label-primary">oldValue</span>到现在执行<code>cmpxchg</code>这条指令这段时间内，<code>value</code>没有被其他线程改写（抛开ABA问题不谈），没有发生冲突，所以我们就可以直接把我们希望更新的新值<span class="label label-info">updateValue</span>写入到<code>value</code>中，那我们再来看看<code>cmpxchg</code>这条指令干了啥，如果相同则把第一个操作数赋值给第二个操作数，也就是将<span class="label label-info">updateValue</span>赋值给<code>value</code>对象（成功更新<code>value</code>的值）。现在这条指令就执行完毕了，EAX寄存器中存储的还是<span class="label label-primary">oldValue</span>，所以最终<code>cmp</code>函数返回的也就是<span class="label label-primary">oldValue</span></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-type">void</span> <span class="hljs-title function_">atomic_add</span><span class="hljs-params">(<span class="hljs-type">int</span>* addr, <span class="hljs-type">int</span> delta)</span> &#123;<br>    <span class="hljs-type">int</span> oldValue;<br>    <span class="hljs-keyword">do</span> &#123;<br>        oldValue = *addr;<br>    &#125; <span class="hljs-keyword">while</span> ( cmp(oldValue, addr, oldValue + delta) != oldValue );<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>这个函数也就可以返回了，对应的就是Java中的<code>Unsafe.getAndAddInt</code>方法</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs java"><br><span class="hljs-keyword">public</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-title function_">getAndAddInt</span><span class="hljs-params">(Object var1, <span class="hljs-type">long</span> var2, <span class="hljs-type">int</span> var4)</span> &#123;<br>    <span class="hljs-type">int</span> var5;<br>    <span class="hljs-keyword">do</span> &#123;<br>        var5 = <span class="hljs-built_in">this</span>.getIntVolatile(var1, var2);<br>    &#125; <span class="hljs-keyword">while</span>(!<span class="hljs-built_in">this</span>.compareAndSwapInt(var1, var2, var5, var5 + var4));<br> <br>    <span class="hljs-keyword">return</span> var5;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>如果EAX中保存的<span class="label label-primary">oldValue</span>和我们执行<code>cmpxchg</code>指令时获取的<code>curValue</code>不同，说明<code>value</code>的值被其他线程改写了，那此刻将第一个操作数<span class="label label-info">updateValue</span>赋值给 EAX 寄存器（我们并没有更新<code>value</code>的值），所以<code>cmp</code>函数返回的值为<span class="label label-info">updateValue</span>。<code>atomic_add</code>函数中<code>cmp</code>返回的<span class="label label-info">updateValue</span>和<span class="label label-primary">oldValue</span>不同，所以要重新执行<code>do while</code>循环去自旋，直到没有冲突发生。</p>
+<h2 id="4-动画展示与总结"><a href="#4-动画展示与总结" class="headerlink" title="4 动画展示与总结"></a><span class="label label-info">4 动画展示与总结</span></h2><p>该动画使用Python <code>manim</code>库<sup id="fnref:3" class="footnote-ref"><a href="#fn:3" rel="footnote"><span class="hint--top hint--rounded" aria-label="[Github 3b1b/manim](https://github.com/3b1b/manim)">[3]</span></a></sup>制作，<a target="_blank" rel="noopener" href="https://github.com/hwollin/animation/blob/main/os/thread/concurrent/cas_animation.py">动画源码</a></p>
+<video width="100%" controls>
+  <source src="cas.mp4" type="video/mp4">
+</video>
+
+<p>最后我们再用高级语言解释一下<code>cmpxchg</code>这条汇编指令的功能。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-comment">/**</span><br><span class="hljs-comment"> * 被多个线程访问的value对象</span><br><span class="hljs-comment"> */</span><br><span class="hljs-type">int</span> value;<br> <br><span class="hljs-comment">/**</span><br><span class="hljs-comment"> * 注意下面的逻辑是一条汇编指令完成的</span><br><span class="hljs-comment"> *</span><br><span class="hljs-comment"> * @param addr value对象的内存地址</span><br><span class="hljs-comment"> * @param oldValue 执行cmpxchg指令前当前线程获取到的value对象的值</span><br><span class="hljs-comment"> * @param updateValue 期望更新的值</span><br><span class="hljs-comment"> * @return</span><br><span class="hljs-comment"> */</span><br><span class="hljs-type">int</span> <span class="hljs-title function_">cmpxchg</span><span class="hljs-params">(<span class="hljs-type">int</span>* addr, <span class="hljs-type">int</span> oldValue, <span class="hljs-type">int</span> updateValue)</span><br>&#123;<br>    <span class="hljs-type">int</span> curValue = *addr; <span class="hljs-comment">//获取最新的value的值</span><br>    <span class="hljs-keyword">if</span> (curValue == oldValue) &#123; <span class="hljs-comment">//无冲突则更新value值为updateValue并返回oldValue</span><br>        *addr == updateValue;<br>        <span class="hljs-keyword">return</span> oldValue;<br>    &#125; <span class="hljs-keyword">else</span> &#123; <span class="hljs-comment">//发生冲突，直接返回updateValue，value对象的值没有更新哦</span><br>        <span class="hljs-keyword">return</span> updateValue;<br>    &#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+<h2 id="5-引用"><a href="#5-引用" class="headerlink" title="5 引用"></a><span class="label label-warning">5 引用</span></h2><section class="footnotes"><div class="footnote-list"><ol><li><span id="fn:1" class="footnote-text"><span><a target="_blank" rel="noopener" href="https://github.com/AdoptOpenJDK/openjdk-jdk8u">Github OpenJDK8源码</a>
+<a href="#fnref:1" rev="footnote" class="footnote-backref"> ↩</a></span></span></li><li><span id="fn:2" class="footnote-text"><span><a target="_blank" rel="noopener" href="http://www.ibiblio.org/gferg/ldp/GCC-Inline-Assembly-HOWTO.html">GCC-Inline-Assembly-HOWTO</a>
+<a href="#fnref:2" rev="footnote" class="footnote-backref"> ↩</a></span></span></li><li><span id="fn:3" class="footnote-text"><span><a target="_blank" rel="noopener" href="https://github.com/3b1b/manim">Github 3b1b&#x2F;manim</a>
+<a href="#fnref:3" rev="footnote" class="footnote-backref"> ↩</a></span></span></li></ol></div></section>
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Concurrency-Programming/" class="category-chain-item">Concurrency Programming</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/Java/" class="print-no-link">#Java</a>
+      
+        <a href="/tags/C-C/" class="print-no-link">#C/C++</a>
+      
+        <a href="/tags/Assembly/" class="print-no-link">#Assembly</a>
+      
+        <a href="/tags/Python/" class="print-no-link">#Python</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>深入理解 CAS</div>
+      <div>https://hwxll.github.io/2022/08/19/cas/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>作者</div>
+          <div>Wei Han</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>发布于</div>
+          <div>2022年8月19日</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>许可协议</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - 署名">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2024/02/05/kmp/" title="字符串匹配之 KMP 算法">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">字符串匹配之 KMP 算法</span>
+                        <span class="visible-mobile">上一篇</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>目录</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">搜索</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">关键词</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    window.tocbot.init(Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc));
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">博客在允许 JavaScript 运行的环境下浏览效果更佳</div>
+  </noscript>
+</body>
+</html>
